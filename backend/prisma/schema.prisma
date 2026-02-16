@@ -1,0 +1,133 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+
+
+
+model User {
+  id         Int      @id @default(autoincrement())
+  email      String   @unique
+  username   String   @unique
+  password   String
+  bio        String?
+  avatarUrl  String?
+  isVerified Boolean  @default(false) // NEW: For the verification badge
+  createdAt  DateTime @default(now())
+
+  // --- Relationships ---
+  stream   Stream?
+  messages Message[]
+  following Follow[] @relation("Following")
+  followers Follow[] @relation("Followers")
+  blocking Block[] @relation("Blocking")
+  blockedBy Block[] @relation("BlockedBy")
+  reportsMade Report[] @relation("Reporter")
+}
+
+// NEW: Added an enum for stream status
+enum StreamStatus {
+  OFFLINE
+  LIVE
+  ENDED
+}
+
+model Stream {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  streamKey   String   @unique @default(uuid())
+  createdAt   DateTime @default(now())
+  endedAt     DateTime?
+
+  // --- NEW FIELDS TO MATCH FRONTEND ---
+  status             StreamStatus @default(OFFLINE)
+  tags               String[]     @default([])
+  chatEnabled        Boolean      @default(true)
+  toxicFilterEnabled Boolean      @default(true)
+  viewerCount        Int          @default(0)
+  maxViewerCount     Int          @default(0)
+  likeCount          Int          @default(0)
+  // --- END OF NEW FIELDS ---
+
+  // Relation to user
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
+
+  // Relation to messages
+  messages Message[]
+}
+
+
+
+
+
+
+
+// --- AUTH & USER MODELS ---
+
+
+
+model Follow {
+  followerId  Int
+  followingId Int
+
+  follower  User @relation("Followers", fields: [followerId], references: [id])
+  following User @relation("Following", fields: [followingId], references: [id])
+
+  @@id([followerId, followingId]) // Composite primary key
+}
+
+model Block {
+  blockerId  Int
+  blockedId  Int
+
+  blocker   User @relation("Blocking", fields: [blockerId], references: [id])
+  blocked   User @relation("BlockedBy", fields: [blockedId], references: [id])
+
+  @@id([blockerId, blockedId])
+}
+
+
+// --- CHAT & GUARD MODELS ---
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  content   String
+  createdAt DateTime @default(now())
+
+  // Relation to author
+  authorId Int
+  author   User @relation(fields: [authorId], references: [id])
+
+  // Relation to stream
+  streamId Int
+  stream   Stream @relation(fields: [streamId], references: [id])
+
+  // Moderation
+  isFlagged Boolean   @default(false) // Flagged by Stream Guard
+  isDeleted Boolean   @default(false) // Soft delete
+  reports   Report[]  @relation("ReportedMessage")
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  reason      String
+  createdAt   DateTime @default(now())
+
+  // Who reported it
+  reporterId  Int
+  reporter    User     @relation("Reporter", fields: [reporterId], references: [id])
+
+  // What message was reported
+  messageId   Int
+  message     Message  @relation("ReportedMessage", fields: [messageId], references: [id])
+}

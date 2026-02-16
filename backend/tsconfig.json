@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    /* ----- Target & Module ----- */
+    "target": "ES2020",                // A modern, stable Node.js target
+    "module": "commonjs",             // The standard module system for Express/Node.js
+    "lib": ["ES2020"],                 // Includes modern JS features like BigInt, Promise.allSettled
+    "types": ["node"],                // !! Crucial: Includes Node.js global types (e.g., process, Buffer)
+    "esModuleInterop": true,          // Enables 'import' syntax for CommonJS modules (like Express)
+    "resolveJsonModule": true,        // Allows importing JSON files directly
+
+    /* ----- Project Structure ----- */
+    "rootDir": "./src",               // Where your TypeScript source code lives
+    "outDir": "./dist",               // Where the compiled JavaScript output goes
+
+    /* ----- Strictness (from your file) ----- */
+    "strict": true,                   // Enables all strict type-checking options
+    "noUncheckedIndexedAccess": true, // Stricter array and object property access
+    "exactOptionalPropertyTypes": true, // Stricter checking of optional properties
+
+    /* ----- Build & Debugging ----- */
+    "sourceMap": true,                // Generates .map files for easier debugging in Node.js
+    
+    /* ----- Code Quality & Reliability ----- */
+    "forceConsistentCasingInFileNames": true, // Prevents case-related bugs
+    "skipLibCheck": true              // Skips type checking of all declaration files (*.d.ts)
+  },
+  "include": ["src/**/*"],            // Specifies which files TypeScript should compile
+  "exclude": ["node_modules"]         // Specifies which files to ignore
+}
