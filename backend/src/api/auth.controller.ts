@@ -2,18 +2,21 @@
 import { Request, Response } from 'express';
 import prisma from '../db';
 import bcrypt from 'bcryptjs';
-// import jwt from 'jsonwebtoken';
-import { v4 as uuidv4 } from 'uuid'; // We need this to generate random guest names
+import { v4 as uuidv4 } from 'uuid';
+import jwt, { JwtPayload, SignOptions, Secret } from 'jsonwebtoken';
 
+const signToken = (
+  id: number,
+  secret: Secret,
+  expiresIn?: SignOptions['expiresIn']
+): string => {
+  const options: SignOptions = {};
 
-// src/api/auth.controller.ts
-// ... (other imports)
-import jwt, { JwtPayload } from 'jsonwebtoken'; // Make sure JwtPayload is imported
+  if (expiresIn !== undefined) {
+    options.expiresIn = expiresIn;
+  }
 
-
-// Helper to sign tokens
-const signToken = (id: number, secret: string, expiresIn: string) => {
-  return jwt.sign({ id }, secret, { expiresIn });
+  return jwt.sign({ id }, secret, options);
 };
 
 export const register = async (req: Request, res: Response) => {

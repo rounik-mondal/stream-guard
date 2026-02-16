@@ -1,84 +1,108 @@
-// src/middleware/auth.middleware.ts
 import { Request, Response, NextFunction } from 'express';
-import jwt, { JwtPayload } from 'jsonwebtoken';
+import jwt, { JwtPayload, Secret } from 'jsonwebtoken';
 import prisma from '../db';
 
+// ===============================
+// JWT PAYLOAD TYPE
+// ===============================
 interface CustomJwtPayload extends JwtPayload {
   id: number;
 }
 
+// ===============================
+// EXPRESS AUGMENTATION
+// ===============================
 declare global {
   namespace Express {
     interface Request {
-      user?: any;
+      user?: {
+        id: number;
+        email: string;
+        username: string;
+        bio: string | null;
+        avatarUrl: string | null;
+        stream: { id: number } | null;
+        _count: {
+          followers: number;
+          following: number;
+        };
+      };
     }
   }
 }
 
-export const protect = async (req: Request, res: Response, next: NextFunction) => {
-  let token;
-  
+// ===============================
+// PROTECT MIDDLEWARE
+// ===============================
+export const protect = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const authHeader = req.headers.authorization;
+
+  // ✅ Check header first
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ detail: 'Not authorized, no token' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  // ✅ HARD guard for token (fixes TS2769)
+  if (!token) {
+    return res.status(401).json({ detail: 'Not authorized, token missing' });
+  }
+
   const secret = process.env.JWT_SECRET;
+
+  // ✅ HARD guard for secret (fixes TS2769)
   if (!secret) {
     throw new Error('JWT_SECRET is not defined in .env file');
   }
 
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    try {
-      token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, secret) as CustomJwtPayload;
+  try {
+    // ✅ verify WITHOUT casting
+    const decoded = jwt.verify(token, secret);
 
-      if (typeof decoded === 'string' || !decoded.id) {
-        return res.status(401).json({ detail: 'Not authorized, token invalid' });
-      }
-
-      // --- THIS IS THE UPDATED PART ---
-      // src/middleware/auth.middleware.ts
-
-// ... (inside your 'protect' function, in the 'try' block)
-
-req.user = await prisma.user.findUnique({
-  where: { id: decoded.id },
-  select: { 
-    id: true, 
-    email: true, 
-    username: true, 
-    bio: true, 
-    avatarUrl: true,
-    
-    // 1. ADD THIS BLOCK to select the one-to-one relation
-    stream: {
-      select: {
-        id: true // We just need to know if it exists
-      }
-    },
-    
-    // 2. FIX THIS BLOCK
-    _count: {
-      select: {
-        // stream: true, // <-- REMOVE THIS LINE
-        followers: true,
-        following: true
-      }
+    // ✅ narrow type properly (fixes TS2352)
+    if (typeof decoded === 'string') {
+      return res.status(401).json({ detail: 'Not authorized, token invalid' });
     }
-  },
-});
 
-// ... (rest of the function)
-      // --- END OF UPDATE ---
-
-      if (!req.user) {
-         return res.status(401).json({ detail: 'User not found' });
-      }
-
-      next();
-    } catch (error) {
-      console.error(error);
-      res.status(401).json({ detail: 'Not authorized, token failed' });
+    if (!('id' in decoded)) {
+      return res.status(401).json({ detail: 'Invalid token payload' });
     }
-  }
 
-  if (!token) {
-    res.status(401).json({ detail: 'Not authorized, no token' });
+    const payload = decoded as CustomJwtPayload;
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        bio: true,
+        avatarUrl: true,
+        stream: {
+          select: { id: true },
+        },
+        _count: {
+          select: {
+            followers: true,
+            following: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(401).json({ detail: 'User not found' });
+    }
+
+    req.user = user;
+    return next();
+  } catch (error) {
+    console.error(error);
+    return res.status(401).json({ detail: 'Not authorized, token failed' });
   }
 };

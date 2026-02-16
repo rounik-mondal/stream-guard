@@ -1,124 +1,42 @@
-// src/api/chat.controller.ts
-// import { Request, Response } from 'express';
-// import prisma from '../db';
-// Import the broadcast helper from your WS service
-// import { broadcastToStream } from '../websocket.service';
-
-// Re-use the same logic from the websocket service
-// const analyzeMessage = (content: string) => {
-//   const badWords = ['examplebadword', 'danger', 'toxicword', 'hate'];
-//   let isToxic = false;
-//   let reason = null;
-//   for (const word of badWords) {
-//     if (content.toLowerCase().includes(word)) {
-//       isToxic = true;
-//       reason = 'Message contains forbidden word';
-//       break;
-//     }
-//   }
-//   return { isToxic, reason };
-// };
-
-// export const handleAnalyze = (req: Request, res: Response) => {
-//   const { message } = req.body;
-//   if (!message) {
-//     return res.status(400).json({ detail: 'No message provided' });
-//   }
-//   const result = analyzeMessage(message);
-//   res.status(200).json(result);
-// };
-
-// export const getMessages = async (req: Request, res: Response) => {
-//   try {
-//     const streamId = parseInt(req.params.streamId);
-//     const messages = await prisma.message.findMany({
-//       where: {
-//         streamId,
-//         isDeleted: false,
-//         isFlagged: false, // By default, don't show flagged messages to viewers
-//       },
-//       orderBy: { createdAt: 'asc' },
-//       take: 50, // Get last 50 messages
-//       include: {
-//         author: {
-//           select: { id: true, username: true, avatarUrl: true },
-//         },
-//       },
-//     });
-//     res.status(200).json(messages);
-//   } catch (error) {
-//     res.status(500).json({ detail: 'Server error' });
-//   }
-// };
-
-// // This endpoint is for non-websocket users (e.g., mobile app)
-// export const sendMessage = async (req: Request, res: Response) => {
-//   try {
-//     const { content, streamId } = req.body;
-//     // @ts-ignore
-//     const authorId = req.user.id;
-
-//     if (!content || !streamId) {
-//       return res.status(400).json({ detail: 'content and streamId required' });
-//     }
-    
-//     // *** RUN STREAM GUARD ***
-//     const analysis = analyzeMessage(content);
-//     if (analysis.isToxic) {
-//       return res.status(400).json({ detail: 'Message violates guidelines' });
-//     }
-
-//     const savedMessage = await prisma.message.create({
-//       data: {
-//         content,
-//         authorId,
-//         streamId: parseInt(streamId),
-//         isFlagged: analysis.isToxic,
-//       },
-//       include: {
-//         author: { select: { id: true, username: true, avatarUrl: true } },
-//       },
-//     });
-
-//     // *** BROADCAST TO WEBSOCKET ***
-//     broadcastToStream(parseInt(streamId), {
-//       type: 'new_message',
-//       payload: savedMessage,
-//     });
-
-//     res.status(201).json(savedMessage);
-
-//   } catch (error) {
-//      res.status(500).json({ detail: 'Server error' });
-//   }
-// };
-
-
-// src/api/chat.controller.ts
-
 import { Request, Response } from 'express';
 import prisma from '../db';
 import { broadcastToStream } from '../websocket.service';
-import { analyzeMessage } from '../services/ai.service'; // <-- 1. IMPORT new function
+import { analyzeMessage } from '../services/ai.service';
 
-// 2. The old, simple analyzeMessage function is DELETED
+// ===============================
+// ANALYZE MESSAGE
+// ===============================
+export const handleAnalyze = async (req: Request, res: Response) => {
+  const { message } = req.body as { message?: string };
 
-export const handleAnalyze = async (req: Request, res: Response) => { // <-- 3. Add 'async'
-  const { message } = req.body;
   if (!message) {
     return res.status(400).json({ detail: 'No message provided' });
   }
-  // 4. Add 'await'
-  const result = await analyzeMessage(message); 
-  res.status(200).json(result);
+
+  const result = await analyzeMessage(message);
+  return res.status(200).json(result);
 };
 
+// ===============================
+// GET MESSAGES
+// ===============================
 export const getMessages = async (req: Request, res: Response) => {
   try {
-    const streamId = parseInt(req.params.streamId);
+    const { streamId } = req.params;
+
+    if (!streamId) {
+      return res.status(400).json({ detail: 'streamId required' });
+    }
+
+    const numericStreamId = Number(streamId);
+
+    if (Number.isNaN(numericStreamId)) {
+      return res.status(400).json({ detail: 'Invalid streamId' });
+    }
+
     const messages = await prisma.message.findMany({
       where: {
-        streamId,
+        streamId: numericStreamId,
         isDeleted: false,
         isFlagged: false,
       },
@@ -130,63 +48,97 @@ export const getMessages = async (req: Request, res: Response) => {
         },
       },
     });
-    res.status(200).json(messages);
+
+    return res.status(200).json(messages);
   } catch (error) {
-    res.status(500).json({ detail: 'Server error' });
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
   }
 };
 
-export const sendMessage = async (req: Request, res: Response) => { // (Already async)
+// ===============================
+// SEND MESSAGE
+// ===============================
+export const sendMessage = async (req: Request, res: Response) => {
   try {
-    const { content, streamId } = req.body;
-    // @ts-ignore
-    const authorId = req.user.id;
+    const { content, streamId } = req.body as {
+      content?: string;
+      streamId?: string | number;
+    };
+
+    if (!req.user) {
+      return res.status(401).json({ detail: 'Not authorized' });
+    }
 
     if (!content || !streamId) {
-      return res.status(400).json({ detail: 'content and streamId required' });
+      return res
+        .status(400)
+        .json({ detail: 'content and streamId required' });
     }
-    
-    // 5. Add 'await'
+
+    const numericStreamId = Number(streamId);
+
+    if (Number.isNaN(numericStreamId)) {
+      return res.status(400).json({ detail: 'Invalid streamId' });
+    }
+
+    // 🔥 StreamGuard AI check
     const analysis = await analyzeMessage(content);
+
     if (analysis.isToxic) {
-      // Send back the AI's reason
-      return res.status(400).json({ detail: analysis.reason || 'Message violates guidelines' });
+      return res.status(400).json({
+        detail: analysis.reason || 'Message violates guidelines',
+      });
     }
 
     const savedMessage = await prisma.message.create({
       data: {
         content,
-        authorId,
-        streamId: parseInt(streamId),
-        isFlagged: analysis.isToxic, // This will be false
+        authorId: req.user.id,
+        streamId: numericStreamId,
+        isFlagged: false,
       },
       include: {
         author: { select: { id: true, username: true, avatarUrl: true } },
       },
     });
 
-    broadcastToStream(parseInt(streamId), {
+    // 🔥 WebSocket broadcast
+    broadcastToStream(numericStreamId, {
       type: 'new_message',
       payload: savedMessage,
     });
 
-    res.status(201).json(savedMessage);
-
+    return res.status(201).json(savedMessage);
   } catch (error) {
-     res.status(500).json({ detail: 'Server error' });
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
   }
 };
 
-// ... (keep all your other functions: deleteMessage, reportMessage, getChatStats)
-
+// ===============================
+// DELETE MESSAGE
+// ===============================
 export const deleteMessage = async (req: Request, res: Response) => {
   try {
-    const messageId = parseInt(req.params.messageId);
-    // @ts-ignore
-    const currentUserId = req.user.id;
+    const { messageId } = req.params;
+
+    if (!req.user) {
+      return res.status(401).json({ detail: 'Not authorized' });
+    }
+
+    if (!messageId) {
+      return res.status(400).json({ detail: 'messageId required' });
+    }
+
+    const numericMessageId = Number(messageId);
+
+    if (Number.isNaN(numericMessageId)) {
+      return res.status(400).json({ detail: 'Invalid messageId' });
+    }
 
     const message = await prisma.message.findUnique({
-      where: { id: messageId },
+      where: { id: numericMessageId },
       include: { stream: true },
     });
 
@@ -194,74 +146,91 @@ export const deleteMessage = async (req: Request, res: Response) => {
       return res.status(404).json({ detail: 'Message not found' });
     }
 
-    // Check if user is author OR stream owner
-    const isAuthor = message.authorId === currentUserId;
-    const isStreamOwner = message.stream.userId === currentUserId;
+    const isAuthor = message.authorId === req.user.id;
+    const isStreamOwner = message.stream.userId === req.user.id;
 
     if (!isAuthor && !isStreamOwner) {
-      return res.status(403).json({ detail: 'You cannot delete this message' });
+      return res
+        .status(403)
+        .json({ detail: 'You cannot delete this message' });
     }
 
-    // Soft delete the message
     await prisma.message.update({
-      where: { id: messageId },
+      where: { id: numericMessageId },
       data: { isDeleted: true },
     });
 
-    // Broadcast the deletion
     broadcastToStream(message.streamId, {
       type: 'delete_message',
-      payload: { messageId },
+      payload: { messageId: numericMessageId },
     });
 
-    res.status(204).send();
-
+    return res.status(204).send();
   } catch (error) {
-     res.status(500).json({ detail: 'Server error' });
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
   }
 };
 
+// ===============================
+// REPORT MESSAGE
+// ===============================
 export const reportMessage = async (req: Request, res: Response) => {
   try {
-    const messageId = parseInt(req.params.messageId);
-    // @ts-ignore
-    const reporterId = req.user.id;
-    const { reason } = req.body;
+    const { messageId } = req.params;
+    const { reason } = req.body as { reason?: string };
+
+    if (!req.user) {
+      return res.status(401).json({ detail: 'Not authorized' });
+    }
+
+    if (!messageId) {
+      return res.status(400).json({ detail: 'messageId required' });
+    }
 
     if (!reason) {
       return res.status(400).json({ detail: 'Reason is required' });
     }
 
+    const numericMessageId = Number(messageId);
+
+    if (Number.isNaN(numericMessageId)) {
+      return res.status(400).json({ detail: 'Invalid messageId' });
+    }
+
     await prisma.report.create({
       data: {
         reason,
-        reporterId,
-        messageId,
+        reporterId: req.user.id,
+        messageId: numericMessageId,
       },
     });
 
-    res.status(201).json({ detail: 'Report submitted' });
+    return res.status(201).json({ detail: 'Report submitted' });
   } catch (error) {
-    res.status(500).json({ detail: 'Server error' });
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
   }
 };
 
-export const getChatStats = async (req: Request, res: Response) => {
+// ===============================
+// CHAT STATS
+// ===============================
+export const getChatStats = async (_req: Request, res: Response) => {
   try {
-    // This is a simple stats endpoint. You can make this query
-    // as complex as you need (e.g., filter by date, by user).
     const totalMessages = await prisma.message.count();
     const flaggedMessages = await prisma.message.count({
       where: { isFlagged: true },
     });
     const totalReports = await prisma.report.count();
 
-    res.status(200).json({
+    return res.status(200).json({
       totalMessages,
       flaggedMessages,
       totalReports,
     });
   } catch (error) {
-    res.status(500).json({ detail: 'Server error' });
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
   }
 };

@@ -10,6 +10,22 @@ const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/
  * @param content The chat message to analyze.
  * @returns An object { isToxic: boolean, reason: string | null }
  */
+
+// ===============================
+// GEMINI RESPONSE TYPE
+// ===============================
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string;
+      }>;
+    };
+  }>;
+};
+
+
+
 export const analyzeMessage = async (content: string): Promise<{ isToxic: boolean; reason: string | null }> => {
   // Check if the key is missing
   if (!GEMINI_API_KEY) {
@@ -39,11 +55,13 @@ export const analyzeMessage = async (content: string): Promise<{ isToxic: boolea
       console.error(`Gemini API request failed with status ${response.status}: ${errorBody}`);
       throw new Error(`Gemini API request failed`);
     }
+    const data = (await response.json()) as GeminiResponse;
 
-    const data = await response.json();
-    
     // Safely parse the response
-    const result = data.candidates?.[0]?.content?.parts?.[0]?.text?.toLowerCase().trim();
+    const result =
+      data.candidates?.[0]?.content?.parts?.[0]?.text
+        ?.toLowerCase()
+        .trim();
 
     if (!result || !['yes', 'no'].includes(result)) {
       console.error('Invalid response format from Gemini API:', JSON.stringify(data));

@@ -1,57 +1,106 @@
-// src/api/users.controller.ts
 import { Request, Response } from 'express';
 import prisma from '../db';
 
-// --- Profile ---
-
+// ===============================
+// UPDATE ME
+// ===============================
 export const updateMe = async (req: Request, res: Response) => {
   try {
-    const { bio, avatarUrl } = req.body;
-    // @ts-ignore
-    const userId = req.user.id;
+    if (!req.user) {
+      return res.status(401).json({ detail: 'Not authorized' });
+    }
+
+    const { bio, avatarUrl } = req.body as {
+      bio?: string | null;
+      avatarUrl?: string | null;
+    };
+
+    // ✅ BUILD UPDATE OBJECT SAFELY
+    const updateData: {
+      bio?: string | null;
+      avatarUrl?: string | null;
+    } = {};
+
+    if (bio !== undefined) {
+      updateData.bio = bio;
+    }
+
+    if (avatarUrl !== undefined) {
+      updateData.avatarUrl = avatarUrl;
+    }
 
     const user = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        bio,
-        avatarUrl,
+      where: { id: req.user.id },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        bio: true,
+        avatarUrl: true,
       },
-      select: { id: true, email: true, username: true, bio: true, avatarUrl: true },
     });
-    res.status(200).json(user);
+
+    return res.status(200).json(user);
   } catch (error) {
-    res.status(500).json({ detail: 'Server error updating profile' });
+    console.error(error);
+    return res
+      .status(500)
+      .json({ detail: 'Server error updating profile' });
   }
 };
 
+
+// ===============================
+// SEARCH USERS
+// ===============================
 export const searchUsers = async (req: Request, res: Response) => {
   try {
-    const query = req.query.q as string;
+    const query = req.query.q as string | undefined;
+
     if (!query) {
-      return res.status(400).json({ detail: 'Search query "q" is required' });
+      return res
+        .status(400)
+        .json({ detail: 'Search query "q" is required' });
     }
 
     const users = await prisma.user.findMany({
       where: {
         username: {
           contains: query,
-          mode: 'insensitive', // Case-insensitive search
+          mode: 'insensitive',
         },
       },
       select: { id: true, username: true, avatarUrl: true },
       take: 10,
     });
-    res.status(200).json(users);
+
+    return res.status(200).json(users);
   } catch (error) {
-    res.status(500).json({ detail: 'Server error' });
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
   }
 };
 
+// ===============================
+// GET USER PROFILE (by id)
+// ===============================
 export const getUserProfile = async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ detail: 'User id required' });
+    }
+
+    const numericId = Number(id);
+
+    if (Number.isNaN(numericId)) {
+      return res.status(400).json({ detail: 'Invalid user id' });
+    }
+
     const user = await prisma.user.findUnique({
-      where: { id },
+      where: { id: numericId },
       select: {
         id: true,
         username: true,
@@ -66,212 +115,300 @@ export const getUserProfile = async (req: Request, res: Response) => {
     if (!user) {
       return res.status(404).json({ detail: 'User not found' });
     }
-    res.status(200).json(user);
+
+    return res.status(200).json(user);
   } catch (error) {
-    res.status(500).json({ detail: 'Server error' });
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
   }
 };
 
-
-
-// src/api/users.controller.ts
-// ... (imports)
-
-// ... (keep your other functions: updateMe, searchUsers, getUserProfile, etc.)
-
+// ===============================
+// GET USER BY USERNAME
+// ===============================
 export const getUserByUsername = async (req: Request, res: Response) => {
-   try {
-    const username = req.params.username;
-    
-    // This query now selects all the data your profile page needs
+  try {
+    const { username } = req.params;
+
+    if (!username) {
+      return res.status(400).json({ detail: 'Username required' });
+    }
+
     const user = await prisma.user.findUnique({
-      where: { username },
-      select: { 
-        id: true, 
-        email: true, 
-        username: true, 
-        bio: true, // This is where "full_name" is stored
+      where: { username }, // ✅ now guaranteed string
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        bio: true,
         avatarUrl: true,
-        isVerified: true, // Send this field
-        createdAt: true, // Send this field
-        stream: { // Send stream object
-          select: {
-            id: true 
-          }
+        isVerified: true,
+        createdAt: true,
+        stream: {
+          select: { id: true },
         },
-        _count: { // Send counts
+        _count: {
           select: {
             followers: true,
-            following: true
-          }
-        }
+            following: true,
+          },
+        },
       },
     });
 
     if (!user) {
       return res.status(404).json({ detail: 'User not found' });
     }
-    
-    // We must manually add stream_count because Prisma can't count one-to-one
+
     const formattedUser = {
       ...user,
-      stream_count: user.stream ? 1 : 0 
+      stream_count: user.stream ? 1 : 0,
     };
-    
-    res.status(200).json(formattedUser);
-    
+
+    return res.status(200).json(formattedUser);
   } catch (error) {
-    res.status(500).json({ detail: 'Server error' });
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
   }
-}
+};
 
-// ... (keep your other functions: followUser, unfollowUser, etc.)
-
-// --- Follows ---
-
+// ===============================
+// FOLLOW USER
+// ===============================
 export const followUser = async (req: Request, res: Response) => {
   try {
-    const idToFollow = parseInt(req.params.id);
-    // @ts-ignore
-    const currentUserId = req.user.id;
+    if (!req.user) {
+      return res.status(401).json({ detail: 'Not authorized' });
+    }
 
-    if (idToFollow === currentUserId) {
-      return res.status(400).json({ detail: 'You cannot follow yourself' });
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ detail: 'User id required' });
+    }
+
+    const idToFollow = Number(id);
+
+    if (idToFollow === req.user.id) {
+      return res
+        .status(400)
+        .json({ detail: 'You cannot follow yourself' });
     }
 
     await prisma.follow.create({
       data: {
-        followerId: currentUserId,
+        followerId: req.user.id,
         followingId: idToFollow,
       },
     });
-    res.status(204).send();
+
+    return res.status(204).send();
   } catch (error) {
-     res.status(500).json({ detail: 'Server error or already following' });
+    console.error(error);
+    return res
+      .status(500)
+      .json({ detail: 'Server error or already following' });
   }
 };
 
+// ===============================
+// UNFOLLOW USER
+// ===============================
 export const unfollowUser = async (req: Request, res: Response) => {
   try {
-    const idToUnfollow = parseInt(req.params.id);
-    // @ts-ignore
-    const currentUserId = req.user.id;
+    if (!req.user) {
+      return res.status(401).json({ detail: 'Not authorized' });
+    }
+
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ detail: 'User id required' });
+    }
+
+    const idToUnfollow = Number(id);
 
     await prisma.follow.delete({
       where: {
         followerId_followingId: {
-          followerId: currentUserId,
+          followerId: req.user.id,
           followingId: idToUnfollow,
         },
       },
     });
-    res.status(204).send();
+
+    return res.status(204).send();
   } catch (error) {
-    res.status(500).json({ detail: 'Server error or not following' });
+    console.error(error);
+    return res
+      .status(500)
+      .json({ detail: 'Server error or not following' });
   }
 };
 
+// ===============================
+// FOLLOWERS
+// ===============================
 export const getFollowers = async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
-    const follows = await prisma.follow.findMany({
-      where: { followingId: id },
-      include: {
-        follower: { // Get the user data of the follower
-          select: { id: true, username: true, avatarUrl: true }
-        }
-      }
-    });
-    // Return just the user data
-    res.status(200).json(follows.map(f => f.follower));
-  } catch (error) {
-     res.status(500).json({ detail: 'Server error' });
-  }
-};
+    const { id } = req.params;
 
-export const getFollowing = async (req: Request, res: Response) => {
-  try {
-    const id = parseInt(req.params.id);
-    const follows = await prisma.follow.findMany({
-      where: { followerId: id },
-      include: {
-        following: { // Get the user data of the person being followed
-          select: { id: true, username: true, avatarUrl: true }
-        }
-      }
-    });
-    res.status(200).json(follows.map(f => f.following));
-  } catch (error) {
-     res.status(500).json({ detail: 'Server error' });
-  }
-};
-
-// --- Blocks ---
-
-export const blockUser = async (req: Request, res: Response) => {
-  try {
-    const idToBlock = parseInt(req.params.id);
-    // @ts-ignore
-    const currentUserId = req.user.id;
-
-    if (idToBlock === currentUserId) {
-      return res.status(400).json({ detail: 'You cannot block yourself' });
+    if (!id) {
+      return res.status(400).json({ detail: 'User id required' });
     }
 
-    await prisma.block.create({
-      data: {
-        blockerId: currentUserId,
-        blockedId: idToBlock,
-      },
-    });
-    res.status(204).send();
-  } catch (error) {
-     res.status(500).json({ detail: 'Server error or already blocked' });
-  }
-};
+    const numericId = Number(id);
 
-export const unblockUser = async (req: Request, res: Response) => {
-  try {
-    const idToUnblock = parseInt(req.params.id);
-    // @ts-ignore
-    const currentUserId = req.user.id;
-
-    await prisma.block.delete({
-      where: {
-        blockerId_blockedId: {
-          blockerId: currentUserId,
-          blockedId: idToUnblock,
+    const follows = await prisma.follow.findMany({
+      where: { followingId: numericId },
+      include: {
+        follower: {
+          select: { id: true, username: true, avatarUrl: true },
         },
       },
     });
-    res.status(204).send();
+
+    return res.status(200).json(follows.map(f => f.follower));
   } catch (error) {
-    res.status(500).json({ detail: 'Server error or not blocked' });
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
   }
 };
 
+// ===============================
+// FOLLOWING
+// ===============================
+export const getFollowing = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
 
-// src/api/users.controller.ts
-// ... (at the end of the file)
+    if (!id) {
+      return res.status(400).json({ detail: 'User id required' });
+    }
 
+    const numericId = Number(id);
+
+    const follows = await prisma.follow.findMany({
+      where: { followerId: numericId },
+      include: {
+        following: {
+          select: { id: true, username: true, avatarUrl: true },
+        },
+      },
+    });
+
+    return res.status(200).json(follows.map(f => f.following));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
+  }
+};
+
+// ===============================
+// IS FOLLOWING
+// ===============================
 export const isFollowing = async (req: Request, res: Response) => {
   try {
-    const idToFollow = parseInt(req.params.id);
-    // @ts-ignore
-    const currentUserId = req.user.id;
+    if (!req.user) {
+      return res.status(401).json({ detail: 'Not authorized' });
+    }
+
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ detail: 'User id required' });
+    }
+
+    const idToFollow = Number(id);
 
     const follow = await prisma.follow.findUnique({
       where: {
         followerId_followingId: {
-          followerId: currentUserId,
+          followerId: req.user.id,
           followingId: idToFollow,
         },
       },
     });
 
-    res.status(200).json({ is_following: !!follow });
-
+    return res.status(200).json({ is_following: !!follow });
   } catch (error) {
-     res.status(500).json({ detail: 'Server error' });
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
+  }
+};
+
+
+
+// ===============================
+// BLOCK USER
+// ===============================
+export const blockUser = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ detail: 'Not authorized' });
+    }
+
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ detail: 'User id required' });
+    }
+
+    const idToBlock = Number(id);
+
+    if (idToBlock === req.user.id) {
+      return res
+        .status(400)
+        .json({ detail: 'You cannot block yourself' });
+    }
+
+    await prisma.block.create({
+      data: {
+        blockerId: req.user.id,
+        blockedId: idToBlock,
+      },
+    });
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ detail: 'Server error or already blocked' });
+  }
+};
+
+// ===============================
+// UNBLOCK USER
+// ===============================
+export const unblockUser = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ detail: 'Not authorized' });
+    }
+
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ detail: 'User id required' });
+    }
+
+    const idToUnblock = Number(id);
+
+    await prisma.block.delete({
+      where: {
+        blockerId_blockedId: {
+          blockerId: req.user.id,
+          blockedId: idToUnblock,
+        },
+      },
+    });
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ detail: 'Server error or not blocked' });
   }
 };
