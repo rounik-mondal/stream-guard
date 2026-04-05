@@ -72,14 +72,14 @@ export const AdminDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-secondary-900 text-white p-8">
       <div className="max-w-7xl mx-auto space-y-8">
-        
+
         {/* Header */}
         <div className="flex items-center space-x-4 mb-8">
           <div className="p-3 bg-error-500/20 rounded-xl rounded-tr-none">
             <Shield className="w-8 h-8 text-error-400" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-error-400 to-accent-500">Moderation Control Center</h1>
+            <h1 className="text-3xl font-bold bg-clip-text text-white bg-gradient-to-r from-error-400 to-accent-500">Moderation Control Center</h1>
             <p className="text-secondary-400">Platform-wide safety and analytics dashboard</p>
           </div>
         </div>
@@ -141,7 +141,7 @@ export const AdminDashboard: React.FC = () => {
               Highest Toxicity Offenders
             </h2>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -182,7 +182,7 @@ export const AdminDashboard: React.FC = () => {
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <button 
+                        <button
                           onClick={() => handleBanUser(user.id)}
                           disabled={user.isBanned}
                           className="px-3 py-1 bg-error-500/10 text-error-400 hover:bg-error-500/20 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
