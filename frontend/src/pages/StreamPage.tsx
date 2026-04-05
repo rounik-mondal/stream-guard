@@ -24,11 +24,11 @@ export const StreamPage: React.FC = () => {
     },
     {
       enabled: !!id,
-      refetchInterval: 5000, // Refetch every 5 seconds for live data
+      refetchInterval: false, // Turned off manual polling for real-time WebSockets
     }
   );
 
-  const { videoRef, startCamera, stopCamera, isCameraOn, isStreamer, error: rtcError, liveViewers } = useWebRTCStream(id, stream?.userId);
+  const { videoRef, startCamera, stopCamera, isCameraOn, isStreamer, error: rtcError, liveViewers, wsEvent } = useWebRTCStream(id, stream?.userId);
 
   useEffect(() => {
     if (stream) {
@@ -52,10 +52,26 @@ export const StreamPage: React.FC = () => {
     }
   }, [isStreamer, stream?.status, id]);
 
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-    setLikeCount(prev => isLiked ? prev - 1 : prev + 1);
-    // TODO: Implement actual like API call
+  useEffect(() => {
+    // Intercept WebSocket payloads directly for immediate UI updates
+    if (wsEvent?.type === 'stream_liked') {
+      setLikeCount(wsEvent.payload.likeCount);
+    }
+  }, [wsEvent]);
+
+  const handleLike = async () => {
+    if (isLiked) return; // Prevent spamming for now
+    setIsLiked(true);
+    setLikeCount(prev => prev + 1); // Optimistic UI update
+    
+    try {
+      // Backend automatically broadcasts to all WS clients
+      await api.post(`/api/streams/${id}/like`);
+    } catch (err) {
+      console.error('Failed to like stream', err);
+      setIsLiked(false);
+      setLikeCount(prev => prev - 1);
+    }
   };
 
   const handleShare = () => {
@@ -308,7 +324,7 @@ export const StreamPage: React.FC = () => {
                 )}
               </div>
 
-              <ChatInterface streamId={stream.id} isEnabled={stream.chat_enabled} isStreamer={isStreamer} />
+              <ChatInterface streamId={stream.id} isEnabled={stream.chat_enabled} isStreamer={isStreamer} wsEvent={wsEvent} />
             </div>
 
             {/* Stream Stats */}

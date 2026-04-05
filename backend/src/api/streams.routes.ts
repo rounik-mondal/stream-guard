@@ -12,7 +12,8 @@ import {
   endStream,
   viewStream,
   leaveStream,
-  getStreamerAnalytics
+  getStreamerAnalytics,
+  likeStream
 } from './streams.controller';
 import { protect } from '../middleware/auth.middleware';
 
@@ -32,9 +33,10 @@ router.get('/streams/:id', getStream);
 router.put('/streams/:id', protect, updateStream);
 router.delete('/streams/:id', protect, deleteStream);
 
-// /api/streams/:id/start and /end
+// /api/streams/:id/start, /end, /like
 router.post('/streams/:id/start', protect, startStream);
 router.post('/streams/:id/end', protect, endStream);
+router.post('/streams/:id/like', protect, likeStream);
 
 // /api/streams/:id/view and /leave
 // Note: Your api.ts file points 'leave' to the '/view' endpoint.

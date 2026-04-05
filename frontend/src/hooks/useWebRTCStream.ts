@@ -9,6 +9,7 @@ export const useWebRTCStream = (streamId: string | undefined, streamerId: number
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [liveViewers, setLiveViewers] = useState(0);
+  const [wsEvent, setWsEvent] = useState<{ type: string; payload: any } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const ws = useRef<WebSocket | null>(null);
@@ -191,6 +192,11 @@ export const useWebRTCStream = (streamId: string | undefined, streamerId: number
                 setLiveViewers(payload.liveViewers);
             }
 
+            // EXTERNAL EVENT BUBBLING: Pass chat and likes up to UI
+            if (['new_message', 'stream_liked', 'delete_message'].includes(type)) {
+                setWsEvent({ type, payload });
+            }
+
         } catch (err) {
             console.error('WebSocket message parsing/handling error:', err);
         }
@@ -229,5 +235,5 @@ export const useWebRTCStream = (streamId: string | undefined, streamerId: number
     }
   };
 
-  return { videoRef, startCamera, stopCamera, isCameraOn, isStreamer, error, localStream, remoteStream, liveViewers };
+  return { videoRef, startCamera, stopCamera, isCameraOn, isStreamer, error, localStream, remoteStream, liveViewers, wsEvent };
 };

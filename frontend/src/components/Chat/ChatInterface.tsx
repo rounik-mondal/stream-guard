@@ -33,9 +33,10 @@ interface ChatInterfaceProps {
   streamId: number;
   isEnabled: boolean;
   isStreamer?: boolean;
+  wsEvent?: { type: string; payload: any } | null;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnabled, isStreamer }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnabled, isStreamer, wsEvent }) => {
   const { user, isAuthenticated, isGuest } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -43,11 +44,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnable
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch chat messages
+  // Fetch history natively
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        // Backend sends an array of messages already in the correct camelCase format
         const response = await api.get(`/api/chat/${streamId}/messages?limit=50`);
         setMessages(response.data);
       } catch (error) {
@@ -57,6 +57,23 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnable
 
     fetchMessages();
   }, [streamId]);
+
+  // Handle incoming real-time socket payloads
+  useEffect(() => {
+    if (!wsEvent) return;
+
+    if (wsEvent.type === 'new_message') {
+      // Check if message is already in list (optimistic UI duplicate prevention)
+      setMessages(prev => {
+        if (prev.find(m => m.id === wsEvent.payload.id)) return prev;
+        return [...prev, wsEvent.payload];
+      });
+    }
+
+    if (wsEvent.type === 'delete_message') {
+      setMessages(prev => prev.filter(m => m.id !== wsEvent.payload.messageId));
+    }
+  }, [wsEvent]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -94,10 +111,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnable
         streamId: streamId,
       });
 
-      // --- FIXED: No mapping needed ---
-      // The backend response (response.data) is already in the
-      // correct ChatMessage format.
-      setMessages(prev => [...prev, response.data]);
+      // We do NOT manually setMessages here anymore because 
+      // the websocket broadcast of 'new_message' will pick it up automatically!
       setNewMessage('');
       
     } catch (error: any) {

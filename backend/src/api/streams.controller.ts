@@ -430,6 +430,32 @@ export const deleteStream = async (req: Request, res: Response) => {
   }
 };
 
+import { broadcastToStream } from '../websocket.service';
+
+export const likeStream = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ detail: 'Stream id required' });
+
+    const numericId = Number(id);
+
+    const stream = await prisma.stream.update({
+      where: { id: numericId },
+      data: { likeCount: { increment: 1 } },
+    });
+
+    broadcastToStream(numericId, {
+      type: 'stream_liked',
+      payload: { likeCount: stream.likeCount },
+    });
+
+    return res.status(200).json({ likeCount: stream.likeCount });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
+  }
+};
+
 export const startStream = async (req: Request, res: Response) => {
   try {
     if (!req.user) {
