@@ -13,6 +13,11 @@ datasource db {
 
 
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 model User {
   id         Int      @id @default(autoincrement())
   email      String   @unique
@@ -20,11 +25,14 @@ model User {
   password   String
   bio        String?
   avatarUrl  String?
-  isVerified Boolean  @default(false) // NEW: For the verification badge
+  isVerified Boolean  @default(false)
+  role       UserRole @default(USER) // NEW: Admin or normal user
+  isBanned   Boolean  @default(false) // NEW: For global ban
+  toxicScore Int      @default(0) // NEW: Keep track of toxicity
   createdAt  DateTime @default(now())
 
   // --- Relationships ---
-  stream   Stream?
+  streams   Stream[]
   messages Message[]
   following Follow[] @relation("Following")
   followers Follow[] @relation("Followers")
@@ -51,15 +59,18 @@ model Stream {
   // --- NEW FIELDS TO MATCH FRONTEND ---
   status             StreamStatus @default(OFFLINE)
   tags               String[]     @default([])
+  category           String?      @default("Other")
   chatEnabled        Boolean      @default(true)
   toxicFilterEnabled Boolean      @default(true)
+  isPublic           Boolean      @default(true)
+  allowGuests        Boolean      @default(true)
   viewerCount        Int          @default(0)
   maxViewerCount     Int          @default(0)
   likeCount          Int          @default(0)
   // --- END OF NEW FIELDS ---
 
   // Relation to user
-  userId Int  @unique
+  userId Int
   user   User @relation(fields: [userId], references: [id])
 
   // Relation to messages

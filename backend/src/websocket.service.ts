@@ -5,8 +5,8 @@ import prisma from './db';
 import { analyzeMessage } from './services/ai.service'; // <-- 1. IMPORT new function
 
 // This map stores all active connections, grouped by streamId
-// Key: streamId, Value: Set of connected clients (WebSockets)
-const streams = new Map<number, Set<WebSocket>>();
+// Key: streamId, Value: Map of userId -> WebSocket
+const streams = new Map<number, Map<number, WebSocket>>();
 
 /**
  * Sends a JSON payload to every connected client in a specific stream.
@@ -20,6 +20,19 @@ export const broadcastToStream = (streamId: number, payload: any) => {
         client.send(message);
       }
     });
+  }
+};
+
+/**
+ * Sends a JSON payload to a specific user in a stream.
+ */
+export const sendToUserInStream = (streamId: number, userId: number, payload: any) => {
+  const clients = streams.get(streamId);
+  if (clients) {
+    const client = clients.get(userId);
+    if (client && client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(payload));
+    }
   }
 };
 
@@ -57,12 +70,28 @@ export const handleWebSocketConnection = (ws: WebSocket) => {
         currentStreamId = parseInt(streamId);
 
         if (!streams.has(currentStreamId)) {
-          streams.set(currentStreamId, new Set());
+          streams.set(currentStreamId, new Map());
         }
-        streams.get(currentStreamId)!.add(ws);
+        streams.get(currentStreamId)!.set(currentUserId, ws);
+
+        // Increment database viewerCount for lifetime views
+        try {
+          await prisma.stream.update({
+            where: { id: currentStreamId },
+            data: { viewerCount: { increment: 1 } },
+          });
+        } catch (dbErr) {
+          console.error("DB Error incrementing viewer count", dbErr);
+        }
 
         console.log(`User ${currentUserId} joined stream ${currentStreamId}`);
         ws.send(JSON.stringify({ type: 'join_success', payload: { streamId } }));
+
+        // Broadcast active viewer count
+        broadcastToStream(currentStreamId, {
+          type: 'viewer_count_update',
+          payload: { liveViewers: streams.get(currentStreamId)!.size }
+        });
       }
 
       // --- Message Type: SEND_MESSAGE ---
@@ -91,19 +120,41 @@ export const handleWebSocketConnection = (ws: WebSocket) => {
         });
 
         if (analysis.isToxic) {
+          // Increment user's toxic score
+          await prisma.user.update({
+            where: { id: currentUserId },
+            data: { toxicScore: { increment: 1 } },
+          });
+
           // Send "blocked" message ONLY to the sender
           ws.send(JSON.stringify({
               type: 'message_blocked',
-              // FIXED: Use the dynamic reason from the AI
               payload: { reason: analysis.reason || 'Message violates community guidelines.' }, 
             }));
-          // Broadcast the toxic message ONLY to the stream owner (moderator)
-          // TODO: Add logic to find stream owner's WebSocket and send
         } else {
           // Broadcast the clean message to everyone
           broadcastToStream(currentStreamId, {
             type: 'new_message',
             payload: savedMessage,
+          });
+        }
+      }
+
+      // --- WebRTC Signaling ---
+      if (['webrtc_offer', 'webrtc_answer', 'webrtc_ice_candidate', 'webrtc_viewer_join'].includes(data.type)) {
+        if (!currentStreamId || !currentUserId) return;
+        
+        const { targetUserId } = data.payload;
+        // If there's a specific target, send only to them. Otherwise broadcast.
+        if (targetUserId) {
+          sendToUserInStream(currentStreamId, targetUserId, {
+            type: data.type,
+            payload: { ...data.payload, senderId: currentUserId }
+          });
+        } else {
+          broadcastToStream(currentStreamId, {
+            type: data.type,
+            payload: { ...data.payload, senderId: currentUserId }
           });
         }
       }
@@ -115,9 +166,21 @@ export const handleWebSocketConnection = (ws: WebSocket) => {
 
   ws.on('close', () => {
     // Remove client from the "room"
-    if (currentStreamId && streams.has(currentStreamId)) {
-      streams.get(currentStreamId)!.delete(ws);
+    if (currentStreamId && currentUserId && streams.has(currentStreamId)) {
+      streams.get(currentStreamId)!.delete(currentUserId);
       console.log(`User ${currentUserId} left stream ${currentStreamId}`);
+      
+      // Broadcast updated count
+      const updatedSize = streams.get(currentStreamId)!.size;
+      broadcastToStream(currentStreamId, {
+        type: 'viewer_count_update',
+        payload: { liveViewers: updatedSize }
+      });
+      
+      // Optional: Cleanup empty maps
+      if (updatedSize === 0) {
+        streams.delete(currentStreamId);
+      }
     }
   });
 };

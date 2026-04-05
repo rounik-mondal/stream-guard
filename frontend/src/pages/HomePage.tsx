@@ -41,19 +41,41 @@ interface Stream {
   };
 }
 
-export const HomePage: React.FC = () => {
+interface HomePageProps {
+  filter?: 'all' | 'discover' | 'trending' | 'following';
+}
+
+export const HomePage: React.FC<HomePageProps> = ({ filter = 'all' }) => {
   const [featuredStreams, setFeaturedStreams] = useState<Stream[]>([]);
   const [liveStreams, setLiveStreams] = useState<Stream[]>([]);
+  const [trendingStreams, setTrendingStreams] = useState<Stream[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+
+  const CATEGORIES = ['Gaming', 'Music', 'Art', 'Tech', 'Lifestyle', 'Education', 'Sports', 'Cooking', 'Travel', 'Fashion', 'Other'];
 
   // Fetch live streams
   const { data: liveStreamsData, isLoading: isLoadingLive } = useQuery(
-    'live-streams',
+    ['live-streams', selectedCategory],
     async () => {
-      const response = await api.get('/api/streams/live?limit=12');
+      let url = '/api/streams/live?limit=12';
+      if (selectedCategory) url += `&category=${selectedCategory}`;
+      const response = await api.get(url);
       return response.data;
     },
     {
       refetchInterval: 30000, // Refetch every 30 seconds
+    }
+  );
+
+  // Fetch trending streams
+  const { data: trendingStreamsData, isLoading: isLoadingTrending } = useQuery(
+    'trending-streams',
+    async () => {
+      const response = await api.get('/api/streams/trending');
+      return response.data;
+    },
+    {
+      refetchInterval: 60000, // Refetch every 60 seconds
     }
   );
 
@@ -73,18 +95,88 @@ export const HomePage: React.FC = () => {
     if (featuredStreamsData) {
       setFeaturedStreams(featuredStreamsData);
     }
-  }, [liveStreamsData, featuredStreamsData]);
+    if (trendingStreamsData) {
+      setTrendingStreams(trendingStreamsData);
+    }
+  }, [liveStreamsData, featuredStreamsData, trendingStreamsData]);
 
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <HeroSection />
+      {filter === 'all' && <HeroSection />}
 
       {/* Stats Section */}
-      <StatsSection />
+      {filter === 'all' && <StatsSection />}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {filter === 'discover' && (
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-secondary-100 mb-2">Discover New Streams</h1>
+            <p className="text-secondary-400">Explore categories and find exactly what you're looking for.</p>
+          </div>
+        )}
+        {filter === 'following' && (
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-secondary-100 mb-2">Following</h1>
+            <p className="text-secondary-400">Catch up with the streamers you follow.</p>
+          </div>
+        )}
+
+        {/* Categories Scroller */}
+        <div className="mb-10 flex overflow-x-auto pb-4 space-x-3 scrollbar-hide">
+          <button 
+            onClick={() => setSelectedCategory('')}
+            className={`whitespace-nowrap px-4 py-2 rounded-full font-medium transition-colors ${selectedCategory === '' ? 'bg-primary-500 text-white' : 'bg-secondary-800 text-secondary-300 hover:bg-secondary-700'}`}
+          >
+            All Categories
+          </button>
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`whitespace-nowrap px-4 py-2 rounded-full font-medium transition-colors ${selectedCategory === cat ? 'bg-primary-500 text-white' : 'bg-secondary-800 text-secondary-300 hover:bg-secondary-700'}`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Trending Now Section */}
+        {(filter === 'all' || filter === 'trending' || filter === 'discover') && (
+        <section className="mb-12">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-3">
+              <TrendingUp className="w-6 h-6 text-accent-500" />
+              <h2 className="text-2xl font-bold text-secondary-100">Trending Now</h2>
+            </div>
+          </div>
+          
+          {isLoadingTrending ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="card p-4 animate-pulse">
+                  <div className="w-full h-32 bg-secondary-700 rounded-lg mb-4"></div>
+                  <div className="h-4 bg-secondary-700 rounded mb-2"></div>
+                </div>
+              ))}
+            </div>
+          ) : trendingStreams.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {trendingStreams.slice(0, filter === 'trending' ? 12 : 4).map((stream, index) => (
+                <motion.div key={stream.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }}>
+                  <StreamCard stream={stream} featured />
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-4 text-secondary-500">No trending streams available.</div>
+          )}
+        </section>
+        )}
+
         {/* Live Now Section */}
+        {(filter === 'all' || filter === 'discover') && (
         <section className="mb-12">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
@@ -142,8 +234,10 @@ export const HomePage: React.FC = () => {
             </div>
           )}
         </section>
+        )}
 
         {/* Featured Streams */}
+        {(filter === 'all' || filter === 'discover') && (
         <section className="mb-12">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
@@ -189,8 +283,24 @@ export const HomePage: React.FC = () => {
             </div>
           )}
         </section>
+        )}
+
+        {/* Following Placeholder */}
+        {filter === 'following' && (
+          <div className="text-center py-16 bg-secondary-800/20 rounded-xl border border-secondary-700/50">
+            <div className="w-16 h-16 bg-secondary-700 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Users className="w-8 h-8 text-secondary-400" />
+            </div>
+            <h3 className="text-xl font-bold text-secondary-100 mb-2">No active streams from followed users</h3>
+            <p className="text-secondary-400">Discover new creators and expand your network!</p>
+            <Link to="/discover" className="btn-primary mt-6 inline-block">
+              Discover Streams
+            </Link>
+          </div>
+        )}
 
         {/* AI Features Section */}
+        {filter === 'all' && (
         <section className="bg-gradient-to-r from-primary-600/10 to-accent-600/10 rounded-2xl p-8 border border-primary-500/20">
           <div className="text-center mb-8">
             <div className="inline-flex items-center space-x-2 bg-primary-600/20 text-primary-400 px-4 py-2 rounded-full text-sm font-medium mb-4">
@@ -244,6 +354,7 @@ export const HomePage: React.FC = () => {
             </div>
           </div>
         </section>
+        )}
       </div>
     </div>
   );

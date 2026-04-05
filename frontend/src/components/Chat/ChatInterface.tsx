@@ -32,9 +32,10 @@ interface ChatMessage {
 interface ChatInterfaceProps {
   streamId: number;
   isEnabled: boolean;
+  isStreamer?: boolean;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnabled }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnabled, isStreamer }) => {
   const { user, isAuthenticated, isGuest } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -114,6 +115,28 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnable
     });
   };
 
+  const handleDeleteMessage = async (messageId: number) => {
+    try {
+      await api.delete(`/api/chat/${messageId}`);
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      toast.success('Message deleted');
+    } catch (err) {
+      toast.error('Failed to delete message');
+    }
+  };
+
+  const handleBanUser = async (userId: number) => {
+    if (!window.confirm('Are you sure you want to ban this user globally? This requires Admin privileges if doing globally, so maybe we just block from stream?')) return;
+    try {
+      // For now we map this to the global ban if they are an admin, otherwise just kick?
+      // Since Streamer can't use admin APIs, let's call a theoretical block API or alert for now.
+      await api.post(`/api/admin/ban/${userId}`);
+      toast.success('User banned');
+    } catch (err) {
+      toast.error('Failed to ban user (Admins only)');
+    }
+  };
+
   if (!isEnabled) {
     return (
       <div className="text-center py-8">
@@ -141,7 +164,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnable
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className={`chat-message ${
+                className={`chat-message group ${
                   isOwnMessage ? 'chat-message-own' : 'chat-message-other'
                 }`}
               >
@@ -193,15 +216,30 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnable
                       {message.content}
                     </div>
 
-                    {/* AI Analysis Info */}
-                    {message.toxic_score !== undefined && (
-                      <div className="flex items-center space-x-2 mt-1">
-                        <Shield className="w-3 h-3 text-success-400" />
-                        <span className="text-xs text-secondary-500">
-                          AI Score: {(message.toxic_score * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                    )}
+                    {/* AI Analysis Info & Moderation Controls */}
+                    <div className="flex items-center justify-between mt-1">
+                      {message.toxic_score !== undefined ? (
+                        <div className="flex items-center space-x-2">
+                          <Shield className="w-3 h-3 text-success-400" />
+                          <span className="text-xs text-secondary-500">
+                            AI Score: {(message.toxic_score * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      ) : <div />}
+                      
+                      {isStreamer && !isOwnMessage && (
+                        <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => handleDeleteMessage(message.id)} className="text-xs text-primary-400 hover:text-primary-300">
+                            Delete
+                          </button>
+                          {message.author && (
+                            <button onClick={() => handleBanUser(message.author!.id)} className="text-xs text-error-400 hover:text-error-300">
+                              Ban
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </motion.div>

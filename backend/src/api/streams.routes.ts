@@ -3,6 +3,7 @@ import { Router } from 'express';
 import {
   listStreams,
   listLiveStreams,
+  listTrendingStreams,
   createStream,
   getStream,
   updateStream,
@@ -10,7 +11,8 @@ import {
   startStream,
   endStream,
   viewStream,
-  leaveStream
+  leaveStream,
+  getStreamerAnalytics
 } from './streams.controller';
 import { protect } from '../middleware/auth.middleware';
 
@@ -19,11 +21,13 @@ const router = Router();
 // /api/streams and /api/streams/live
 router.get('/streams', listStreams);
 router.get('/streams/live', listLiveStreams);
+router.get('/streams/trending', listTrendingStreams);
 
 // /api/streams (POST)
 router.post('/streams', protect, createStream);
 
 // /api/streams/:id (GET, PUT, DELETE)
+router.get('/streams/me/analytics', protect, getStreamerAnalytics);
 router.get('/streams/:id', getStream);
 router.put('/streams/:id', protect, updateStream);
 router.delete('/streams/:id', protect, deleteStream);

@@ -11,6 +11,7 @@ import authRoutes from './api/auth.routes';
 import userRoutes from './api/users.routes';
 import streamRoutes from './api/streams.routes';
 import chatRoutes from './api/chat.routes';
+import adminRoutes from './api/admin.routes';
 
 // Import WS handler
 import { handleWebSocketConnection } from './websocket.service';
@@ -18,7 +19,7 @@ import { handleWebSocketConnection } from './websocket.service';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 5001;
 
 // --- Global Middleware ---
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000' }));
@@ -29,6 +30,7 @@ app.use('/api', authRoutes);
 app.use('/api', userRoutes);
 app.use('/api', streamRoutes);
 app.use('/api', chatRoutes);
+app.use('/api', adminRoutes);
 
 // --- Test Route ---
 app.get('/', (req, res) => {

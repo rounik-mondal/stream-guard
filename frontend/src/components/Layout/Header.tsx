@@ -11,7 +11,8 @@ import {
   LogOut, 
   Settings,
   Shield,
-  Video
+  Video,
+  Activity
 } from 'lucide-react';
 // import { useAuth } from '../../../contexts/AuthContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -125,6 +126,15 @@ export const Header: React.FC = () => {
                         <User className="w-4 h-4" />
                         <span>Profile</span>
                       </Link>
+
+                      <Link
+                        to="/streamer/analytics"
+                        className="flex items-center space-x-2 px-4 py-2 text-primary-400 hover:bg-secondary-700 transition-colors"
+                        onClick={() => setIsUserMenuOpen(false)}
+                      >
+                        <Activity className="w-4 h-4" />
+                        <span>Analytics</span>
+                      </Link>
                       
                       <Link
                         to="/settings"
@@ -134,6 +144,17 @@ export const Header: React.FC = () => {
                         <Settings className="w-4 h-4" />
                         <span>Settings</span>
                       </Link>
+
+                      {user?.role === 'ADMIN' && (
+                        <Link
+                          to="/admin"
+                          className="flex items-center space-x-2 px-4 py-2 text-accent-400 hover:bg-secondary-700 transition-colors"
+                          onClick={() => setIsUserMenuOpen(false)}
+                        >
+                          <Shield className="w-4 h-4" />
+                          <span>Admin Dashboard</span>
+                        </Link>
+                      )}
                       
                       <hr className="my-1 border-secondary-700" />
                       

@@ -10,6 +10,8 @@ const formatStreamForFrontend = (stream: any) => {
     _count,
     chatEnabled,
     toxicFilterEnabled,
+    isPublic,
+    allowGuests,
     viewerCount,
     maxViewerCount,
     likeCount,
@@ -40,8 +42,12 @@ const formatStreamForFrontend = (stream: any) => {
 
   return {
     ...restOfStream,
+    status: stream.status.toLowerCase(),
+    category: stream.category,
     chat_enabled: chatEnabled,
     toxic_filter_enabled: toxicFilterEnabled,
+    is_public: isPublic,
+    allow_guests: allowGuests,
     viewer_count: viewerCount,
     max_viewer_count: maxViewerCount,
     like_count: likeCount,
@@ -109,25 +115,35 @@ export const createStream = async (req: Request, res: Response) => {
       return res.status(401).json({ detail: 'Not authorized' });
     }
 
-    const { title, description } = req.body;
+    const { title, description, category, chat_enabled, toxic_filter_enabled, is_public, allow_guests, tags } = req.body;
 
-    const existingStream = await prisma.stream.findUnique({
-      where: { userId: req.user.id },
+    const existingStream = await prisma.stream.findFirst({
+      where: { 
+        userId: req.user.id,
+        status: {
+          not: 'ENDED'
+        }
+      },
     });
 
     if (existingStream) {
       return res
         .status(409)
-        .json({ detail: 'User already has a stream.' });
+        .json({ detail: 'User already has an active stream.' });
     }
 
     const stream = await prisma.stream.create({
       data: {
         title,
         description,
+        category: category || 'Other',
         userId: req.user.id,
         status: 'OFFLINE',
-        tags: [],
+        tags: tags || [],
+        chatEnabled: chat_enabled !== undefined ? chat_enabled : true,
+        toxicFilterEnabled: toxic_filter_enabled !== undefined ? toxic_filter_enabled : true,
+        isPublic: is_public !== undefined ? is_public : true,
+        allowGuests: allow_guests !== undefined ? allow_guests : true,
       },
       include: {
         user: {
@@ -158,8 +174,9 @@ export const createStream = async (req: Request, res: Response) => {
 export const listStreams = async (req: Request, res: Response) => {
   try {
     const streamerUsername = req.query.streamer as string | undefined;
+    const category = req.query.category as string | undefined;
 
-    let whereClause = {};
+    let whereClause: any = {};
 
     if (streamerUsername) {
       const user = await prisma.user.findUnique({
@@ -170,7 +187,11 @@ export const listStreams = async (req: Request, res: Response) => {
         return res.status(200).json([]);
       }
 
-      whereClause = { userId: user.id };
+      whereClause.userId = user.id;
+    }
+
+    if (category) {
+      whereClause.category = category;
     }
 
     const streams = await prisma.stream.findMany({
@@ -224,6 +245,82 @@ export const listLiveStreams = async (_req: Request, res: Response) => {
     return res
       .status(200)
       .json(streams.map(formatStreamForFrontend));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
+  }
+};
+
+// ===============================
+// LIST TRENDING STREAMS
+// ===============================
+export const listTrendingStreams = async (_req: Request, res: Response) => {
+  try {
+    const streams = await prisma.stream.findMany({
+      where: { status: 'LIVE' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            avatarUrl: true,
+            isVerified: true,
+            _count: { select: { followers: true } },
+          },
+        },
+        _count: { select: { messages: true } },
+      },
+      orderBy: { viewerCount: 'desc' },
+      take: 10,
+    });
+
+    return res
+      .status(200)
+      .json(streams.map(formatStreamForFrontend));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ detail: 'Server error' });
+  }
+};
+
+// ===============================
+// GET STREAMER ANALYTICS
+// ===============================
+export const getStreamerAnalytics = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ detail: 'Not authorized' });
+    }
+
+    const { id } = req.user;
+
+    // Get all streams for this user
+    const streams = await prisma.stream.findMany({
+      where: { userId: id },
+      include: {
+        _count: { select: { messages: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const totalViews = streams.reduce((acc, curr) => acc + curr.viewerCount, 0);
+    const totalLikes = streams.reduce((acc, curr) => acc + curr.likeCount, 0);
+    const totalComments = streams.reduce((acc, curr) => acc + curr._count.messages, 0);
+
+    const formattedStreams = streams.map(s => ({
+      ...s,
+      commentCount: s._count.messages,
+      durationMinutes: s.endedAt ? Math.floor((new Date(s.endedAt).getTime() - new Date(s.createdAt).getTime()) / 60000) : 0
+    }));
+
+    return res.status(200).json({
+      totalStreams: streams.length,
+      totalViews,
+      totalLikes,
+      totalComments,
+      streams: formattedStreams
+    });
+
   } catch (error) {
     console.error(error);
     return res.status(500).json({ detail: 'Server error' });

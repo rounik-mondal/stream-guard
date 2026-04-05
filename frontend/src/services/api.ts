@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance
 export const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8000',
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5001',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -68,6 +68,7 @@ export const endpoints = {
   streams: {
     list: '/api/streams',
     live: '/api/streams/live',
+    trending: '/api/streams/trending',
     create: '/api/streams',
     get: (id: number) => `/api/streams/${id}`,
     update: (id: number) => `/api/streams/${id}`,
@@ -75,7 +76,7 @@ export const endpoints = {
     start: (id: number) => `/api/streams/${id}/start`,
     end: (id: number) => `/api/streams/${id}/end`,
     view: (id: number) => `/api/streams/${id}/view`,
-    leave: (id: number) => `/api/streams/${id}/view`,
+    leave: (id: number) => `/api/streams/${id}/leave`,
   },
   
   // Chat
@@ -88,6 +89,12 @@ export const endpoints = {
     stats: '/api/chat/stats/filter',
     ws: (streamId: number) => `/api/chat/${streamId}/ws`,
   },
+
+  // Admin
+  admin: {
+    dashboard: '/api/admin/dashboard',
+    ban: (userId: number) => `/api/admin/ban/${userId}`,
+  }
 };
 
 // Helper functions

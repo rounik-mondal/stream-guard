@@ -144,13 +144,11 @@ export const getUserByUsername = async (req: Request, res: Response) => {
         avatarUrl: true,
         isVerified: true,
         createdAt: true,
-        stream: {
-          select: { id: true },
-        },
         _count: {
           select: {
             followers: true,
             following: true,
+            streams: true,
           },
         },
       },
@@ -162,7 +160,7 @@ export const getUserByUsername = async (req: Request, res: Response) => {
 
     const formattedUser = {
       ...user,
-      stream_count: user.stream ? 1 : 0,
+      stream_count: user._count.streams,
     };
 
     return res.status(200).json(formattedUser);

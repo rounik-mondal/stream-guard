@@ -12,8 +12,9 @@ interface User {
   email: string;
   bio?: string;
   avatarUrl?: string;
+  role: string;
   _count: { // Add this whole object
-    stream: number;
+    streams: number;
     followers: number;
     following: number;
   };

@@ -21,10 +21,13 @@ declare global {
         username: string;
         bio: string | null;
         avatarUrl: string | null;
-        stream: { id: number } | null;
+        role: string;
+        isBanned: boolean;
+        toxicScore: number;
         _count: {
           followers: number;
           following: number;
+          streams: number;
         };
       };
     }
@@ -83,13 +86,14 @@ export const protect = async (
         username: true,
         bio: true,
         avatarUrl: true,
-        stream: {
-          select: { id: true },
-        },
+        role: true,
+        isBanned: true,
+        toxicScore: true,
         _count: {
           select: {
             followers: true,
             following: true,
+            streams: true,
           },
         },
       },

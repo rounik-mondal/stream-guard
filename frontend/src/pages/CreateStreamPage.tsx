@@ -21,7 +21,6 @@ export const CreateStreamPage: React.FC = () => {
     category: '',
     tags: [] as string[],
     is_public: true,
-    scheduled_start: '',
     chat_enabled: true,
     toxic_filter_enabled: true,
     allow_guests: true,
@@ -52,7 +51,7 @@ export const CreateStreamPage: React.FC = () => {
     }));
   };
 
-  const handleAddTag = (e: React.FormEvent) => {
+  const handleAddTag = (e: React.MouseEvent | React.KeyboardEvent) => {
     e.preventDefault();
     if (newTag.trim() && !formData.tags.includes(newTag.trim()) && formData.tags.length < 5) {
       setFormData(prev => ({
@@ -60,6 +59,13 @@ export const CreateStreamPage: React.FC = () => {
         tags: [...prev.tags, newTag.trim()]
       }));
       setNewTag('');
+    }
+  };
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddTag(e);
     }
   };
 
@@ -170,23 +176,25 @@ export const CreateStreamPage: React.FC = () => {
                 <label className="block text-sm font-medium text-secondary-300 mb-2">
                   Tags
                 </label>
-                <form onSubmit={handleAddTag} className="flex space-x-2 mb-3">
+                <div className="flex space-x-2 mb-3">
                   <input
                     type="text"
                     value={newTag}
                     onChange={(e) => setNewTag(e.target.value)}
+                    onKeyDown={handleTagKeyDown}
                     className="input flex-1"
-                    placeholder="Add a tag"
+                    placeholder="Add a tag and press Enter"
                     maxLength={20}
                   />
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={handleAddTag}
                     disabled={!newTag.trim() || formData.tags.length >= 5}
                     className="btn-primary px-4 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Add
                   </button>
-                </form>
+                </div>
                 
                 {formData.tags.length > 0 && (
                   <div className="flex flex-wrap gap-2">
@@ -320,20 +328,6 @@ export const CreateStreamPage: React.FC = () => {
                 </label>
               </div>
 
-              {/* Scheduled Start */}
-              <div>
-                <label htmlFor="scheduled_start" className="block text-sm font-medium text-secondary-300 mb-2">
-                  Scheduled Start (Optional)
-                </label>
-                <input
-                  type="datetime-local"
-                  id="scheduled_start"
-                  name="scheduled_start"
-                  value={formData.scheduled_start}
-                  onChange={handleChange}
-                  className="input w-full"
-                />
-              </div>
             </div>
           </motion.div>
 

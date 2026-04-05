@@ -104,7 +104,7 @@ export const Sidebar: React.FC = () => {
               <div className="flex items-center justify-between">
                 <span className="text-secondary-400 text-sm">Streams</span>
                 <span className="text-secondary-100 font-medium">
-                  {user._count.stream}
+                  {user._count.streams}
                 </span>
               </div>
               

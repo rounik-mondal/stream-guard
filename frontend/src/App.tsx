@@ -7,9 +7,11 @@ import { StreamPage } from './pages/StreamPage';
 import { CreateStreamPage } from './pages/CreateStreamPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
-import { ProfilePage } from './pages/ProfilePage';
 import { SearchPage } from './pages/SearchPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { AdminDashboard } from './pages/AdminDashboard';
+import { StreamerAnalyticsDashboard } from './pages/StreamerAnalyticsDashboard';
+import { ProfilePage } from './pages/ProfilePage';
 
 function App() {
   return (
@@ -22,10 +24,23 @@ function App() {
           
           {/* Protected routes with layout */}
           <Route path="/" element={<Layout />}>
-            <Route index element={<HomePage />} />
+            <Route index element={<HomePage filter="all" />} />
+            <Route path="discover" element={<HomePage filter="discover" />} />
+            <Route path="trending" element={<HomePage filter="trending" />} />
+            <Route path="following" element={<HomePage filter="following" />} />
             <Route path="stream/:id" element={<StreamPage />} />
             <Route path="search" element={<SearchPage />} />
             <Route path="profile/:username" element={<ProfilePage />} />
+            <Route path="admin" element={
+              <ProtectedRoute>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="streamer/analytics" element={
+              <ProtectedRoute>
+                <StreamerAnalyticsDashboard />
+              </ProtectedRoute>
+            } />
             
             {/* Protected routes */}
             <Route path="create-stream" element={

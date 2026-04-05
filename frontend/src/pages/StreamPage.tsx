@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Play, Users, Share2, Heart, Shield, MessageCircle } from 'lucide-react';
 import { useQuery } from 'react-query';
 import { api } from '../services/api';
 import { ChatInterface } from '../components/Chat/ChatInterface';
+import { useWebRTCStream } from '../hooks/useWebRTCStream';
+import { useAuth } from '../contexts/AuthContext';
 
 export const StreamPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   // Fetch stream data
   const { data: stream, isLoading, error } = useQuery(
@@ -24,11 +28,29 @@ export const StreamPage: React.FC = () => {
     }
   );
 
+  const { videoRef, startCamera, stopCamera, isCameraOn, isStreamer, error: rtcError, liveViewers } = useWebRTCStream(id, stream?.userId);
+
   useEffect(() => {
     if (stream) {
       setLikeCount(stream.like_count);
     }
   }, [stream]);
+
+  useEffect(() => {
+    // If user is the streamer, auto-start camera
+    if (isStreamer && !isCameraOn) {
+      startCamera();
+    }
+    return () => stopCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreamer]);
+
+  useEffect(() => {
+    // When the stream payload arrives, check if we need to ping start
+    if (isStreamer && stream && stream.status !== 'live') {
+      api.post(`/api/streams/${id}/start`).catch(console.error);
+    }
+  }, [isStreamer, stream?.status, id]);
 
   const handleLike = () => {
     setIsLiked(!isLiked);
@@ -45,6 +67,18 @@ export const StreamPage: React.FC = () => {
       });
     } else {
       navigator.clipboard.writeText(window.location.href);
+    }
+  };
+
+  const handleEndStream = async () => {
+    if (!window.confirm("Are you sure you want to end this stream?")) return;
+    try {
+      await api.post(`/api/streams/${id}/end`);
+      stopCamera();
+      // Wait a moment then navigate to analytics or home
+      setTimeout(() => navigate('/streamer/analytics'), 1500);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -79,20 +113,37 @@ export const StreamPage: React.FC = () => {
             {/* Stream Player */}
             <div className="card overflow-hidden">
               <div className="aspect-video bg-gradient-to-br from-secondary-800 to-secondary-900 relative">
-                {/* Placeholder for actual stream player */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="w-20 h-20 bg-primary-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Play className="w-10 h-10 text-primary-400" />
-                    </div>
-                    <div className="text-secondary-400">
-                      {stream.status === 'live' ? 'Live Stream' : 'Stream Ended'}
+                
+                {rtcError && (
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-error-500/80 text-white px-4 py-2 rounded-lg z-10 text-center">
+                    {rtcError}
+                  </div>
+                )}
+
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  playsInline 
+                  muted={true} // Default true to bypass browser autoplay policies
+                  controls={!isStreamer} // Give viewers the ability to manually unmute and adjust volume!
+                  className="w-full h-full object-cover"
+                />
+
+                {(!isStreamer && stream.status !== 'live') && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-secondary-900 absolute">
+                    <div className="text-center">
+                      <div className="w-20 h-20 bg-primary-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Play className="w-10 h-10 text-primary-400" />
+                      </div>
+                      <div className="text-secondary-400">
+                        {stream.status === 'live' ? 'Live Stream' : 'Stream Ended'}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Stream Status */}
-                <div className="absolute top-4 left-4">
+                <div className="absolute top-4 left-4 z-10">
                   <div className={`streaming-status ${
                     stream.status === 'live' 
                       ? 'status-live' 
@@ -112,7 +163,7 @@ export const StreamPage: React.FC = () => {
                   <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2">
                     <div className="flex items-center space-x-2 text-white">
                       <Users className="w-4 h-4" />
-                      <span>{stream.viewer_count} watching</span>
+                      <span>{liveViewers} watching</span>
                     </div>
                   </div>
                 )}
@@ -170,6 +221,15 @@ export const StreamPage: React.FC = () => {
                     <Share2 className="w-4 h-4" />
                     <span>Share</span>
                   </button>
+                  
+                  {isStreamer && stream.status === 'live' && (
+                    <button
+                      onClick={handleEndStream}
+                      className="flex items-center space-x-2 px-4 py-2 bg-error-600/20 text-error-400 rounded-lg hover:bg-error-600/30 border border-error-500/50 transition-colors"
+                    >
+                      <span className="font-medium">End Stream</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -248,7 +308,7 @@ export const StreamPage: React.FC = () => {
                 )}
               </div>
 
-              <ChatInterface streamId={stream.id} isEnabled={stream.chat_enabled} />
+              <ChatInterface streamId={stream.id} isEnabled={stream.chat_enabled} isStreamer={isStreamer} />
             </div>
 
             {/* Stream Stats */}
@@ -257,7 +317,7 @@ export const StreamPage: React.FC = () => {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-secondary-400">Current Viewers</span>
-                  <span className="text-secondary-100 font-medium">{stream.viewer_count}</span>
+                  <span className="text-secondary-100 font-medium">{liveViewers}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-secondary-400">Peak Viewers</span>
