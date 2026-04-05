@@ -5,6 +5,7 @@ import { Shield, Users, Activity, MessageSquare, AlertTriangle, UserX } from 'lu
 import { useQuery } from 'react-query';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
+import { ConfirmModal } from '../components/common/ConfirmModal';
 
 interface AdminStats {
   platform: {
@@ -29,6 +30,8 @@ interface AdminStats {
 export const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<AdminStats | null>(null);
 
+  const [banModalState, setBanModalState] = useState<{ isOpen: boolean; userId: number | null }>({ isOpen: false, userId: null });
+
   const { data, isLoading, refetch } = useQuery(
     'admin-dashboard-stats',
     async () => {
@@ -42,15 +45,20 @@ export const AdminDashboard: React.FC = () => {
     if (data) setStats(data);
   }, [data]);
 
-  const handleBanUser = async (userId: number) => {
-    if (!window.confirm('Are you certain you want to globally ban this user?')) return;
+  const confirmBanUser = async () => {
+    if (!banModalState.userId) return;
     try {
-      await api.post(`/api/admin/ban/${userId}`);
+      await api.post(`/api/admin/ban/${banModalState.userId}`);
       toast.success('User banned globally.');
+      setBanModalState({ isOpen: false, userId: null });
       refetch();
     } catch (err) {
       toast.error('Failed to ban user.');
     }
+  };
+
+  const handleBanUser = (userId: number) => {
+    setBanModalState({ isOpen: true, userId });
   };
 
   if (isLoading || !stats) {
@@ -189,6 +197,16 @@ export const AdminDashboard: React.FC = () => {
             </table>
           </div>
         </motion.div>
+
+        <ConfirmModal
+          isOpen={banModalState.isOpen}
+          title="Global Ban"
+          message="Are you certain you want to globally ban this user? They will totally lose access to the platform."
+          confirmText="Ban User"
+          isDestructive={true}
+          onClose={() => setBanModalState({ isOpen: false, userId: null })}
+          onConfirm={confirmBanUser}
+        />
 
       </div>
     </div>

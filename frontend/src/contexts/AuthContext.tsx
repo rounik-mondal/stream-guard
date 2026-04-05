@@ -176,6 +176,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await fetchUserAfterTokenSet(access_token);
       
       toast.success('Guest session created');
+      navigate('/');
     } catch (error: any) {
       const message = error.response?.data?.detail || 'Failed to create guest session';
       toast.error(message);

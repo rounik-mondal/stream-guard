@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Shield, Mail, Lock, User, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export const RegisterPage: React.FC = () => {
-  const { register, isLoading } = useAuth();
+  const { register, isLoading, isAuthenticated, isGuest } = useAuth();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     username: '',
@@ -16,6 +16,12 @@ export const RegisterPage: React.FC = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated || isGuest) {
+      navigate('/');
+    }
+  }, [isAuthenticated, isGuest, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

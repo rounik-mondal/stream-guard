@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Shield, Mail, Lock, User } from 'lucide-react';
@@ -6,13 +6,19 @@ import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 export const LoginPage: React.FC = () => {
-  const { login, createGuestSession, isLoading } = useAuth();
+  const { login, createGuestSession, isLoading, isAuthenticated, isGuest } = useAuth();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated || isGuest) {
+      navigate('/');
+    }
+  }, [isAuthenticated, isGuest, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

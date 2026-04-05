@@ -176,7 +176,9 @@ export const listStreams = async (req: Request, res: Response) => {
     const streamerUsername = req.query.streamer as string | undefined;
     const category = req.query.category as string | undefined;
 
-    let whereClause: any = {};
+    let whereClause: any = {
+      isPublic: true // Prevent private streams from showing globally
+    };
 
     if (streamerUsername) {
       const user = await prisma.user.findUnique({
@@ -223,10 +225,18 @@ export const listStreams = async (req: Request, res: Response) => {
 // ===============================
 // LIST LIVE STREAMS
 // ===============================
-export const listLiveStreams = async (_req: Request, res: Response) => {
+export const listLiveStreams = async (req: Request, res: Response) => {
   try {
+    const category = req.query.category as string | undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+    
+    let whereClause: any = { status: 'LIVE', isPublic: true };
+    if (category) {
+      whereClause.category = category;
+    }
+
     const streams = await prisma.stream.findMany({
-      where: { status: 'LIVE' },
+      where: whereClause,
       include: {
         user: {
           select: {
@@ -240,6 +250,7 @@ export const listLiveStreams = async (_req: Request, res: Response) => {
         _count: { select: { messages: true } },
       },
       orderBy: { createdAt: 'desc' },
+      ...(limit ? { take: limit } : {})
     });
 
     return res
@@ -254,10 +265,16 @@ export const listLiveStreams = async (_req: Request, res: Response) => {
 // ===============================
 // LIST TRENDING STREAMS
 // ===============================
-export const listTrendingStreams = async (_req: Request, res: Response) => {
+export const listTrendingStreams = async (req: Request, res: Response) => {
   try {
+    const category = req.query.category as string | undefined;
+    let whereClause: any = { status: 'LIVE', isPublic: true };
+    if (category) {
+      whereClause.category = category;
+    }
+
     const streams = await prisma.stream.findMany({
-      where: { status: 'LIVE' },
+      where: whereClause,
       include: {
         user: {
           select: {
@@ -474,6 +491,12 @@ export const startStream = async (req: Request, res: Response) => {
 
     if (!owned) {
       return res.status(404).json({ detail: error });
+    }
+
+    // Verify stream is not ended
+    const streamInfo = await prisma.stream.findUnique({ where: { id: numericId }});
+    if (streamInfo?.status === 'ENDED') {
+      return res.status(400).json({ detail: 'Cannot start an ended stream' });
     }
 
     await prisma.stream.update({

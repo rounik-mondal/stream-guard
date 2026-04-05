@@ -2,16 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Play, Users, Share2, Heart, Shield, MessageCircle } from 'lucide-react';
-import { useQuery } from 'react-query';
+import { useQuery, useQueryClient } from 'react-query';
 import { api } from '../services/api';
 import { ChatInterface } from '../components/Chat/ChatInterface';
 import { useWebRTCStream } from '../hooks/useWebRTCStream';
+import { ConfirmModal } from '../components/common/ConfirmModal';
 import { useAuth } from '../contexts/AuthContext';
 
 export const StreamPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const [showEndModal, setShowEndModal] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -45,12 +47,16 @@ export const StreamPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStreamer]);
 
+  const queryClient = useQueryClient();
+
   useEffect(() => {
     // When the stream payload arrives, check if we need to ping start
-    if (isStreamer && stream && stream.status !== 'live') {
-      api.post(`/api/streams/${id}/start`).catch(console.error);
+    if (isStreamer && stream && stream.status !== 'live' && stream.status !== 'ended') {
+      api.post(`/api/streams/${id}/start`).then(() => {
+         queryClient.setQueryData(['stream', id], (oldData: any) => ({ ...oldData, status: 'live' }));
+      }).catch(console.error);
     }
-  }, [isStreamer, stream?.status, id]);
+  }, [isStreamer, stream?.status, id, queryClient]);
 
   useEffect(() => {
     // Intercept WebSocket payloads directly for immediate UI updates
@@ -86,16 +92,20 @@ export const StreamPage: React.FC = () => {
     }
   };
 
-  const handleEndStream = async () => {
-    if (!window.confirm("Are you sure you want to end this stream?")) return;
+  const confirmEndStream = async () => {
     try {
       await api.post(`/api/streams/${id}/end`);
+      queryClient.setQueryData(['stream', id], (old: any) => ({ ...old, status: 'ended' }));
       stopCamera();
       // Wait a moment then navigate to analytics or home
       setTimeout(() => navigate('/streamer/analytics'), 1500);
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleEndStream = () => {
+    setShowEndModal(true);
   };
 
   if (isLoading) {
@@ -352,6 +362,15 @@ export const StreamPage: React.FC = () => {
           </div>
         </div>
       </div>
+      <ConfirmModal
+        isOpen={showEndModal}
+        title="End Stream"
+        message="Are you absolutely sure you want to end this live stream? This action cannot be reversed."
+        confirmText="End Stream"
+        isDestructive={true}
+        onClose={() => setShowEndModal(false)}
+        onConfirm={confirmEndStream}
+      />
     </div>
   );
 };

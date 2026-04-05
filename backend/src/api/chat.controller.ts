@@ -82,13 +82,31 @@ export const sendMessage = async (req: Request, res: Response) => {
       return res.status(400).json({ detail: 'Invalid streamId' });
     }
 
-    // 🔥 StreamGuard AI check
-    const analysis = await analyzeMessage(content);
+    const stream = await prisma.stream.findUnique({
+      where: { id: numericStreamId },
+      select: { allowGuests: true, toxicFilterEnabled: true },
+    });
 
-    if (analysis.isToxic) {
-      return res.status(400).json({
-        detail: analysis.reason || 'Message violates guidelines',
-      });
+    if (!stream) {
+      return res.status(404).json({ detail: 'Stream not found' });
+    }
+
+    // Guest enforcement
+    if (!stream.allowGuests && req.user.email.endsWith('@guest.com')) {
+      return res.status(403).json({ detail: 'Guests are not allowed to chat in this stream.' });
+    }
+
+    let isToxic = false;
+    let reason = null;
+
+    // 🔥 StreamGuard AI check (conditional)
+    if (stream.toxicFilterEnabled) {
+      const analysis = await analyzeMessage(content);
+      if (analysis.isToxic) {
+        return res.status(400).json({
+          detail: analysis.reason || 'Message violates guidelines',
+        });
+      }
     }
 
     const savedMessage = await prisma.message.create({

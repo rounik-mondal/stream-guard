@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Video, Settings, Shield, Calendar, Tag, Eye } from 'lucide-react';
@@ -12,8 +12,8 @@ const categories = [
 ];
 
 export const CreateStreamPage: React.FC = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
+  const { isGuest } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -26,6 +26,13 @@ export const CreateStreamPage: React.FC = () => {
     allow_guests: true,
   });
   const [newTag, setNewTag] = useState('');
+
+  useEffect(() => {
+    if (isGuest) {
+      toast.error('Guests cannot create streams.');
+      navigate('/');
+    }
+  }, [isGuest, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

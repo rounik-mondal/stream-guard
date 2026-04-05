@@ -26,24 +26,11 @@ type GeminiResponse = {
 
 
 
-// Basic memory cache to limit API usage on recurrent messages
-const messageCache = new Map<string, { isToxic: boolean; reason: string | null }>();
-
 export const analyzeMessage = async (content: string): Promise<{ isToxic: boolean; reason: string | null }> => {
-  if (!content || content.trim().length === 0) {
-    return { isToxic: false, reason: null };
-  }
-
-  const normalizedContent = content.trim().toLowerCase();
-
-  // Check cache first
-  if (messageCache.has(normalizedContent)) {
-    return messageCache.get(normalizedContent)!;
-  }
-
   // Check if the key is missing
   if (!GEMINI_API_KEY) {
     console.warn('GEMINI_API_KEY is missing. AI analysis is disabled. Allowing message.');
+    // Failsafe: If no key, just allow the message
     return { isToxic: false, reason: 'AI analysis disabled.' };
   }
 
@@ -56,7 +43,8 @@ export const analyzeMessage = async (content: string): Promise<{ isToxic: boolea
       body: JSON.stringify({
         contents: [{
           parts: [{
-            text: `Analyze this live stream chat message. If safe, respond EXACTLY with "SAFE". If toxic (hate speech, harassment, spam, extreme profanity), respond with "TOXIC: <Category>" where <Category> is a 1-3 word reason (e.g. Hate Speech, Spam). Message: "${content}"`
+            // This prompt is optimized for a simple "yes" or "no" response
+            text: `Analyze the following message for a live stream chat. Respond with ONLY "yes" if the message is safe and appropriate, or "no" if it contains hate speech, harassment, toxicity, explicit sexual content, spam, or significant profanity. Message: "${content}"`
           }]
         }]
       }),
@@ -69,45 +57,28 @@ export const analyzeMessage = async (content: string): Promise<{ isToxic: boolea
     }
     const data = (await response.json()) as GeminiResponse;
 
+    // Safely parse the response
     const result =
       data.candidates?.[0]?.content?.parts?.[0]?.text
-        ?.trim();
+        ?.toLowerCase()
+        .trim();
 
-    if (!result) {
-      throw new Error('Empty response from Gemini API');
+    if (!result || !['yes', 'no'].includes(result)) {
+      console.error('Invalid response format from Gemini API:', JSON.stringify(data));
+      throw new Error('Invalid response format from Gemini API');
     }
 
-    let analysisResult = { isToxic: false, reason: null as string | null };
-
-    if (result.toUpperCase().startsWith('TOXIC')) {
-      const parts = result.split(':');
-      const reason = parts[1] ? parts[1].trim() : 'Inappropriate content';
-      analysisResult = { isToxic: true, reason };
-    } else if (result.toUpperCase() !== 'SAFE') {
-      // Failsafe block for unexpected responses if they look concerning
-      console.warn(`Unexpected AI response: ${result}`);
-      // Only block if it really didn't say SAFE
-      if (result.toUpperCase().includes('TOXIC') || result.toUpperCase().includes('NO')) {
-          analysisResult = { isToxic: true, reason: 'Flagged by AI' };
-      }
+    // If Gemini says "no", the message is toxic
+    if (result === 'no') {
+      return { isToxic: true, reason: 'Message flagged by AI as inappropriate.' };
     }
 
-    // Cache management (keep it under 1000 items)
-    if (messageCache.size > 1000) {
-      const keys = Array.from(messageCache.keys());
-      for (let i = 0; i < 500; i++) {
-        const keyToDelete = keys[i];
-        if (keyToDelete !== undefined) {
-          messageCache.delete(keyToDelete);
-        }
-      }
-    }
-
-    messageCache.set(normalizedContent, analysisResult);
-    return analysisResult;
+    // result === 'yes', the message is clean
+    return { isToxic: false, reason: null };
 
   } catch (error: any) {
     console.error('Error analyzing message with Gemini:', error.message);
+    // Failsafe: In case of any API error, it's safer to block the message.
     return { isToxic: true, reason: 'Message could not be analyzed by AI.' };
   }
 };

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Shield, AlertTriangle, User } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
+import { ConfirmModal } from '../common/ConfirmModal';
 import toast from 'react-hot-toast';
 
 // --- FIXED: Updated interface to match backend's camelCase response ---
@@ -42,6 +43,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnable
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [banModalState, setBanModalState] = useState<{ isOpen: boolean; userId: number | null }>({ isOpen: false, userId: null });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch history natively
@@ -140,16 +142,19 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnable
     }
   };
 
-  const handleBanUser = async (userId: number) => {
-    if (!window.confirm('Are you sure you want to ban this user globally? This requires Admin privileges if doing globally, so maybe we just block from stream?')) return;
+  const confirmBanUser = async () => {
+    if (!banModalState.userId) return;
     try {
-      // For now we map this to the global ban if they are an admin, otherwise just kick?
-      // Since Streamer can't use admin APIs, let's call a theoretical block API or alert for now.
-      await api.post(`/api/admin/ban/${userId}`);
+      await api.post(`/api/admin/ban/${banModalState.userId}`);
       toast.success('User banned');
+      setBanModalState({ isOpen: false, userId: null });
     } catch (err) {
       toast.error('Failed to ban user (Admins only)');
     }
+  };
+
+  const handleBanUser = (userId: number) => {
+    setBanModalState({ isOpen: true, userId });
   };
 
   if (!isEnabled) {
@@ -317,6 +322,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ streamId, isEnable
           Messages are analyzed in real-time to maintain a safe environment.
         </p>
       </div>
+
+      <ConfirmModal
+        isOpen={banModalState.isOpen}
+        title="Ban User Globally"
+        message="Are you sure you want to ban this user globally? This requires Admin privileges. If you are just a streamer, this will fail."
+        confirmText="Ban User"
+        isDestructive={true}
+        onClose={() => setBanModalState({ isOpen: false, userId: null })}
+        onConfirm={confirmBanUser}
+      />
     </div>
   );
 };
