@@ -1,4 +1,6 @@
 // src/services/ai.service.ts
+import dotenv from "dotenv";
+dotenv.config();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // We'll use 1.5 Flash, as it's fast, cheap, and perfect for moderation
